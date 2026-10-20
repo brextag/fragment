@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #1e1f22;
+  color: #dbdee1;
+  font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Discord Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2b2d31;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1a1b1e;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #111214;
+}
+
+/* Spoiler styles */
+.spoiler-hidden {
+  background-color: #2b2d31;
+  color: transparent !important;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  padding: 0 4px;
+}
+.spoiler-hidden:hover {
+  background-color: #35373c;
+}
+.spoiler-revealed {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 0 4px;
+  color: inherit !important;
+}
+
+/* Speaking Halo Pulse */
+@keyframes speaking-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(35, 165, 90, 0.8);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(35, 165, 90, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(35, 165, 90, 0);
+  }
+}
+
+.speaking-ring {
+  border: 2px solid #23a55a !important;
+  animation: speaking-pulse 1.4s infinite;
+}
+
+/* Tooltip transition */
+.discord-tooltip {
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}

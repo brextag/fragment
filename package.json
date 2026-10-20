@@ -1,0 +1,17 @@
+{
+  "name": "fragment-messenger",
+  "version": "1.0.0",
+  "description": "Fragment — Real-time Web Messenger",
+  "scripts": {
+    "start": "node server/index.js",
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "server": "node server/index.js",
+    "client": "npm --prefix client run dev",
+    "dev": "node -e \"const { spawn } = require('child_process'); spawn('node', ['server/index.js'], { stdio: 'inherit', shell: true }); spawn('npm', ['--prefix', 'client', 'run', 'dev'], { stdio: 'inherit', shell: true });\"",
+    "build": "npm --prefix client run build",
+    "postinstall": "npm --prefix client install"
+  },
+  "keywords": ["fragment", "messenger", "socket.io", "react", "webrtc"],
+  "author": "",
+  "license": "ISC"
+}

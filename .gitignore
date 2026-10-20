@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Local databases & uploads
+server/data.json
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Build outputs
+client/dist/
+
+# Logs & temp
+*.log
+.DS_Store
+scratch/
+.vercel
+
