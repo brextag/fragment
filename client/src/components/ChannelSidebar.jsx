@@ -11,7 +11,8 @@ import {
   Settings,
   PhoneOff,
   Radio,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 
 export default function ChannelSidebar() {
@@ -33,7 +34,9 @@ export default function ChannelSidebar() {
     setIsCreateChannelOpen,
     setIsSettingsOpen,
     activeDmUserId,
-    setActiveDmUserId
+    setActiveDmUserId,
+    directMessages,
+    setDirectMessages
   } = useDiscord();
 
   const [collapsedCategories, setCollapsedCategories] = useState({});
@@ -59,13 +62,29 @@ export default function ChannelSidebar() {
 
   // Direct Messages view (@me)
   if (activeServerId === '@me') {
-    const otherUsers = (users || []).filter(u => u.id !== currentUser.id);
+    // Only display conversations where messages have been exchanged or currently selected
+    const activeDmParticipantIds = new Set();
+    (directMessages || []).forEach(dm => {
+      if (dm.participants?.includes(currentUser.id) && dm.messages?.length > 0) {
+        const otherId = dm.participants.find(id => id !== currentUser.id);
+        if (otherId) activeDmParticipantIds.add(otherId);
+      }
+    });
+
+    if (activeDmUserId) {
+      activeDmParticipantIds.add(activeDmUserId);
+    }
+
+    const dmUsers = (users || []).filter(u => activeDmParticipantIds.has(u.id) && u.id !== currentUser.id);
 
     return (
       <div className="w-60 bg-[#2b2d31] flex flex-col h-full select-none flex-shrink-0">
         {/* Find Conversation search */}
         <div className="h-12 border-b border-[#1f2023] px-2.5 flex items-center shadow-sm">
-          <button className="w-full bg-[#1e1f22] text-[#949ba4] text-sm px-2 py-1.5 rounded flex items-center justify-between hover:text-[#dbdee1] transition">
+          <button
+            onClick={() => setActiveDmUserId(null)}
+            className="w-full bg-[#1e1f22] text-[#949ba4] text-sm px-2 py-1.5 rounded flex items-center justify-between hover:text-[#dbdee1] transition"
+          >
             <span>Find or start a conversation</span>
           </button>
         </div>
@@ -86,44 +105,62 @@ export default function ChannelSidebar() {
             <span>Direct Messages</span>
           </div>
 
-          {/* List of registered DM contacts */}
-          {otherUsers.length === 0 ? (
-            <div className="text-xs text-[#949ba4] px-3 py-2 italic">
-              No other users yet. Open another tab or invite a friend to chat!
+          {/* List of active DM contacts */}
+          {dmUsers.length === 0 ? (
+            <div className="text-xs text-[#949ba4] px-3 py-4 text-center space-y-1">
+              <p className="font-medium text-[#dbdee1]">No open chats</p>
+              <p className="text-[11px] text-[#949ba4]/75">Click Friends above or pick someone in a server to start chatting!</p>
             </div>
           ) : (
-            otherUsers.map(user => {
+            dmUsers.map(user => {
               const isSelected = activeDmUserId === user.id;
               return (
                 <div
                   key={user.id}
                   onClick={() => setActiveDmUserId(user.id)}
-                  className={`flex items-center gap-3 px-2 py-2 rounded-md cursor-pointer group transition ${
+                  className={`flex items-center justify-between px-2 py-2 rounded-md cursor-pointer group transition ${
                     isSelected ? 'bg-[#404249] text-white' : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'
                   }`}
                 >
-                  <div className="relative">
-                    <img
-                      src={user.avatar}
-                      alt={user.username}
-                      className="w-8 h-8 rounded-full object-cover bg-[#1e1f22]"
-                    />
-                    <span
-                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#2b2d31] ${getStatusColor(
-                        user.status
-                      )}`}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate flex items-center gap-1.5">
-                      <span className={isSelected ? 'text-white' : 'text-[#dbdee1]'}>
-                        {user.displayName || user.username}
-                      </span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative flex-shrink-0">
+                      <img
+                        src={user.avatar}
+                        alt={user.username}
+                        className="w-8 h-8 rounded-full object-cover bg-[#1e1f22]"
+                      />
+                      <span
+                        className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#2b2d31] ${getStatusColor(
+                          user.status
+                        )}`}
+                      />
                     </div>
-                    <div className="text-xs text-[#949ba4] truncate">
-                      {user.status === 'online' ? 'Online' : 'Offline'}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate flex items-center gap-1.5">
+                        <span className={isSelected ? 'text-white' : 'text-[#dbdee1]'}>
+                          {user.displayName || user.username}
+                        </span>
+                      </div>
+                      <div className="text-xs text-[#949ba4] truncate">
+                        {user.status === 'online' ? 'Online' : 'Offline'}
+                      </div>
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (activeDmUserId === user.id) setActiveDmUserId(null);
+                      if (setDirectMessages) {
+                        setDirectMessages(prev => prev.filter(dm => !dm.participants.includes(user.id)));
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-white text-[#949ba4] rounded transition"
+                    title="Close DM"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               );
             })

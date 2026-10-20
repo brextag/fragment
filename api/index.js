@@ -1,6 +1,6 @@
-const store = require('../lib/store');
+import store from '../lib/store.js';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   store.handleCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -31,8 +31,8 @@ module.exports = async (req, res) => {
   if (pathname === '/api/auth/register') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
-      const { username, password, displayName, avatar, color } = store.parseBody(req);
-      const result = store.registerUser({ username, password, displayName, avatar, color });
+      const { username, password, displayName, avatar, banner, color } = store.parseBody(req);
+      const result = store.registerUser({ username, password, displayName, avatar, banner, color });
       return res.status(200).json(result);
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Registration failed.' });
@@ -184,7 +184,17 @@ module.exports = async (req, res) => {
     return res.status(200).json(newChannel);
   }
 
-  // 11. User Status: /api/users/status
+  // 11. User Profile: /api/users/profile
+  if (pathname === '/api/users/profile') {
+    if (req.method !== 'POST' && req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
+    const { userId, displayName, avatar, banner, color, customStatus, bio, status } = store.parseBody(req);
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const result = store.updateUserProfile(userId, { displayName, avatar, banner, color, customStatus, bio, status });
+    if (!result) return res.status(404).json({ error: 'User not found' });
+    return res.status(200).json(result);
+  }
+
+  // 12. User Status: /api/users/status
   if (pathname === '/api/users/status') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     const { userId, status, customStatus } = store.parseBody(req);
@@ -193,7 +203,7 @@ module.exports = async (req, res) => {
     return res.status(200).json(updated || { id: userId, status, customStatus });
   }
 
-  // 12. Smart Sync: /api/sync
+  // 13. Smart Sync: /api/sync
   if (pathname === '/api/sync') {
     const channelId = query.channelId || url.searchParams.get('channelId');
     const userId = query.userId || url.searchParams.get('userId');
@@ -202,7 +212,7 @@ module.exports = async (req, res) => {
     return res.status(200).json(syncData);
   }
 
-  // 13. Voice: /api/voice
+  // 14. Voice: /api/voice
   if (pathname === '/api/voice') {
     if (req.method === 'GET') return res.status(200).json(store.getVoiceState());
     if (req.method === 'POST') {
@@ -213,6 +223,7 @@ module.exports = async (req, res) => {
           username: user.username,
           displayName: user.displayName || user.username,
           avatar: user.avatar,
+          banner: user.banner,
           isMuted: false,
           isDeafened: false,
           isSpeaking: false,
@@ -234,7 +245,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 14. Upload: /api/upload
+  // 15. Upload: /api/upload
   if (pathname === '/api/upload') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
@@ -259,4 +270,4 @@ module.exports = async (req, res) => {
   }
 
   return res.status(404).json({ error: 'Endpoint not found: ' + pathname });
-};
+}

@@ -106,19 +106,40 @@ export default function DirectMessagesView() {
         {/* Message history */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {/* Header banner */}
-          <div className="pt-6 pb-4 border-b border-[#35373c] mb-4">
-            <img
-              src={targetUser.avatar}
-              alt={targetUser.username}
-              className="w-20 h-20 rounded-full object-cover mb-3"
-            />
-            <h1 className="text-3xl font-extrabold text-white mb-1">
-              {targetUser.displayName || targetUser.username}
-            </h1>
-            <p className="text-sm text-[#949ba4]">
-              This is the beginning of your direct message history with{' '}
-              <strong className="text-white">@{targetUser.username}</strong>.
-            </p>
+          <div className="rounded-xl overflow-hidden border border-[#35373c] mb-6 bg-[#232428]">
+            <div
+              className="h-28 w-full relative"
+              style={{
+                backgroundColor: targetUser.color || '#5865f2',
+                backgroundImage: targetUser.banner ? `url(${targetUser.banner})` : undefined,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }}
+            >
+              <div className="absolute inset-0 bg-black/20" />
+            </div>
+            <div className="px-5 pb-5 relative">
+              <div className="relative -mt-10 mb-3 flex items-end justify-between">
+                <img
+                  src={targetUser.avatar}
+                  alt={targetUser.username}
+                  className="w-20 h-20 rounded-full border-4 border-[#232428] object-cover bg-[#1e1f22]"
+                />
+                <span className="text-xs bg-[#1e1f22] text-[#949ba4] px-2.5 py-1 rounded-full border border-[#35373c]">
+                  @{targetUser.username.toLowerCase()}#{targetUser.discriminator || '0001'}
+                </span>
+              </div>
+              <h1 className="text-2xl font-extrabold text-white mb-1">
+                {targetUser.displayName || targetUser.username}
+              </h1>
+              {targetUser.bio && (
+                <p className="text-xs text-[#dbdee1] mb-2">{targetUser.bio}</p>
+              )}
+              <p className="text-xs text-[#949ba4]">
+                This is the beginning of your direct message history with{' '}
+                <strong className="text-white">@{targetUser.username}</strong>.
+              </p>
+            </div>
           </div>
 
           {messages.map((m) => {

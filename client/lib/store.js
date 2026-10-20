@@ -12,9 +12,13 @@ if (process.env.VERCEL || !fs.existsSync(path.dirname(DATA_FILE))) {
   DATA_FILE = path.join('/tmp', 'fragment_data.json');
 }
 
+const SECRET = process.env.SESSION_SECRET || 'fragment_jwt_secret_2026_super_secure';
+
+const DEFAULT_BANNER = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop';
+
 const INITIAL_DATA = {
   users: [],
-  sessions: {}, // token -> userId
+  sessions: {},
   servers: [
     {
       id: 's_main',
@@ -105,6 +109,24 @@ class Store {
     }
   }
 
+  // Stateless Token Generator (JWT-style HMAC-SHA256 signature)
+  createToken(user) {
+    const payload = Buffer.from(JSON.stringify({
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName || user.username,
+      discriminator: user.discriminator || '0001',
+      avatar: user.avatar,
+      banner: user.banner || DEFAULT_BANNER,
+      color: user.color || '#5865F2',
+      role: user.role || 'Member',
+      time: Date.now()
+    })).toString('base64url');
+
+    const signature = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+  }
+
   // Password Hashing
   hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
     const hash = crypto.scryptSync(password, salt, 64).toString('hex');
@@ -119,6 +141,7 @@ class Store {
   getPublicUser(user) {
     if (!user) return null;
     const { salt, passwordHash, ...publicData } = user;
+    if (!publicData.banner) publicData.banner = DEFAULT_BANNER;
     return publicData;
   }
 
@@ -138,12 +161,50 @@ class Store {
 
   getUserByToken(token) {
     if (!token) return null;
+
+    // 1. First check stateless signed token (permanent across serverless cold starts!)
+    if (token.includes('.')) {
+      const [payloadStr, sig] = token.split('.');
+      const expectedSig = crypto.createHmac('sha256', SECRET).update(payloadStr).digest('base64url');
+      if (sig === expectedSig) {
+        try {
+          const payload = JSON.parse(Buffer.from(payloadStr, 'base64url').toString('utf8'));
+          let user = this.getUser(payload.userId);
+          if (!user) {
+            // Rehydrate user in memory for cold serverless lambdas!
+            const newUser = {
+              id: payload.userId,
+              username: payload.username,
+              displayName: payload.displayName || payload.username,
+              discriminator: payload.discriminator || '0001',
+              avatar: payload.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(payload.username)}`,
+              banner: payload.banner || DEFAULT_BANNER,
+              color: payload.color || '#5865F2',
+              role: payload.role || 'Member',
+              status: 'online',
+              customStatus: '',
+              bio: '',
+              createdAt: new Date().toISOString()
+            };
+            if (!this.data.users) this.data.users = [];
+            this.data.users.push(newUser);
+            this.save();
+            user = this.getPublicUser(newUser);
+          }
+          return user;
+        } catch (e) {
+          // Fall through to session check
+        }
+      }
+    }
+
+    // 2. Legacy session map check
     const userId = (this.data.sessions || {})[token];
     if (!userId) return null;
     return this.getUser(userId);
   }
 
-  registerUser({ username, password, displayName, avatar, color }) {
+  registerUser({ username, password, displayName, avatar, banner, color }) {
     const cleanUsername = (username || '').trim();
     if (!cleanUsername || cleanUsername.length < 2) {
       throw new Error('Username must be at least 2 characters.');
@@ -160,6 +221,7 @@ class Store {
     const userId = 'u_' + crypto.randomUUID().slice(0, 8);
     const discriminator = Math.floor(1000 + Math.random() * 9000).toString();
     const defaultAvatar = avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`;
+    const userBanner = banner || DEFAULT_BANNER;
     const userColor = color || '#5865F2';
 
     const newUser = {
@@ -168,11 +230,13 @@ class Store {
       displayName: (displayName && displayName.trim()) || cleanUsername,
       discriminator,
       avatar: defaultAvatar,
+      banner: userBanner,
       color: userColor,
       salt,
       passwordHash: hash,
       status: 'online',
       customStatus: '',
+      bio: '',
       role: (this.data.users || []).length === 0 ? 'Server Owner' : 'Member',
       createdAt: new Date().toISOString()
     };
@@ -188,7 +252,7 @@ class Store {
       }
     });
 
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = this.createToken(newUser);
     if (!this.data.sessions) this.data.sessions = {};
     this.data.sessions[token] = userId;
     this.save();
@@ -208,7 +272,7 @@ class Store {
       throw new Error('Invalid username or password.');
     }
 
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = this.createToken(user);
     if (!this.data.sessions) this.data.sessions = {};
     this.data.sessions[token] = user.id;
     this.save();
@@ -221,6 +285,24 @@ class Store {
       delete this.data.sessions[token];
       this.save();
     }
+  }
+
+  updateUserProfile(userId, updates = {}) {
+    const user = (this.data.users || []).find(u => u.id === userId);
+    if (!user) return null;
+
+    if (updates.displayName !== undefined) user.displayName = updates.displayName.trim();
+    if (updates.avatar !== undefined && updates.avatar) user.avatar = updates.avatar;
+    if (updates.banner !== undefined && updates.banner) user.banner = updates.banner;
+    if (updates.color !== undefined && updates.color) user.color = updates.color;
+    if (updates.status !== undefined && updates.status) user.status = updates.status;
+    if (updates.customStatus !== undefined) user.customStatus = updates.customStatus;
+    if (updates.bio !== undefined) user.bio = updates.bio;
+
+    this.save();
+    const publicUser = this.getPublicUser(user);
+    const newToken = this.createToken(user);
+    return { user: publicUser, token: newToken };
   }
 
   updateUserStatus(userId, status, customStatus) {

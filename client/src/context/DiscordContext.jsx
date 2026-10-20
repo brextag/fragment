@@ -7,9 +7,16 @@ const DiscordContext = createContext(null);
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 export function DiscordProvider({ children }) {
-  // Auth state
+  // Auth state with local persistent credentials backup
   const [token, setToken] = useState(() => localStorage.getItem('discord_auth_token'));
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('discord_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   // App data
@@ -46,7 +53,7 @@ export function DiscordProvider({ children }) {
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  // 1. Check existing token on mount
+  // 1. Check existing token on mount without wiping local user on cold starts
   useEffect(() => {
     async function checkAuth() {
       if (!token) {
@@ -59,14 +66,13 @@ export function DiscordProvider({ children }) {
         });
         if (res.ok) {
           const data = await res.json();
-          setCurrentUser(data.user);
-        } else {
-          localStorage.removeItem('discord_auth_token');
-          setToken(null);
-          setCurrentUser(null);
+          if (data.user) {
+            setCurrentUser(data.user);
+            localStorage.setItem('discord_user', JSON.stringify(data.user));
+          }
         }
       } catch (err) {
-        console.error('Failed to verify session token:', err);
+        console.warn('Network auth verification fallback to persistent cached credentials:', err);
       } finally {
         setIsLoadingAuth(false);
       }
@@ -100,9 +106,9 @@ export function DiscordProvider({ children }) {
     if (currentUser) {
       fetchInitialData();
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
-  // 3. Socket connection setup (dual-mode: handles connected daemon OR serverless fallback gracefully)
+  // 3. Socket connection setup
   useEffect(() => {
     if (!currentUser) return;
 
@@ -116,7 +122,6 @@ export function DiscordProvider({ children }) {
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        console.log('[Fragment] Real-time WebSocket connected as', currentUser.username);
         setIsSocketConnected(true);
         socket.emit('user:register', { userId: currentUser.id });
         if (activeChannelId) {
@@ -129,7 +134,6 @@ export function DiscordProvider({ children }) {
       });
 
       socket.on('connect_error', () => {
-        // Normal when deployed to serverless platforms like Vercel
         setIsSocketConnected(false);
       });
 
@@ -207,6 +211,7 @@ export function DiscordProvider({ children }) {
         setUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
         if (currentUser && currentUser.id === updatedUser.id) {
           setCurrentUser(prev => ({ ...prev, ...updatedUser }));
+          localStorage.setItem('discord_user', JSON.stringify({ ...currentUser, ...updatedUser }));
         }
       });
 
@@ -224,7 +229,7 @@ export function DiscordProvider({ children }) {
         }
       });
     } catch (e) {
-      console.warn('Socket initialization failed, using serverless polling fallback:', e);
+      console.warn('Socket error, fallback to reactive polling:', e);
     }
 
     return () => {
@@ -234,7 +239,7 @@ export function DiscordProvider({ children }) {
     };
   }, [currentUser?.id]);
 
-  // 4. Reactive Smart-Sync Polling Fallback (ensures instant Vercel multi-user delivery without persistent socket server)
+  // 4. Reactive Smart-Sync Polling Fallback
   useEffect(() => {
     if (!currentUser) return;
 
@@ -257,7 +262,6 @@ export function DiscordProvider({ children }) {
 
         if (data.servers && data.servers.length > 0) {
           setServers(prev => {
-            // Keep servers in sync if new ones were added
             if (data.servers.length !== prev.length) return data.servers;
             return prev;
           });
@@ -299,8 +303,6 @@ export function DiscordProvider({ children }) {
       }
     };
 
-    // Poll every 1.5s when socket is offline (standard Vercel serverless mode)
-    // or every 8s as background data reconciliation when socket is active
     const pollInterval = isSocketConnected ? 8000 : 1500;
     const intervalTimer = setInterval(syncWithServer, pollInterval);
 
@@ -350,17 +352,18 @@ export function DiscordProvider({ children }) {
   }, [activeServerId, activeDmUserId, currentUser]);
 
   // Auth Functions
-  const register = async ({ username, password, displayName, avatar, color }) => {
+  const register = async ({ username, password, displayName, avatar, banner, color }) => {
     const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, displayName, avatar, color })
+      body: JSON.stringify({ username, password, displayName, avatar, banner, color })
     });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || 'Registration failed.');
     }
     localStorage.setItem('discord_auth_token', data.token);
+    localStorage.setItem('discord_user', JSON.stringify(data.user));
     setToken(data.token);
     setCurrentUser(data.user);
     return data.user;
@@ -377,6 +380,7 @@ export function DiscordProvider({ children }) {
       throw new Error(data.error || 'Login failed.');
     }
     localStorage.setItem('discord_auth_token', data.token);
+    localStorage.setItem('discord_user', JSON.stringify(data.user));
     setToken(data.token);
     setCurrentUser(data.user);
     return data.user;
@@ -397,9 +401,46 @@ export function DiscordProvider({ children }) {
       console.warn(e);
     }
     localStorage.removeItem('discord_auth_token');
+    localStorage.removeItem('discord_user');
     setToken(null);
     setCurrentUser(null);
     setIsSettingsOpen(false);
+  };
+
+  const updateProfile = async (updates) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/users/profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          ...updates
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data.user);
+        localStorage.setItem('discord_user', JSON.stringify(data.user));
+        if (data.token) {
+          localStorage.setItem('discord_auth_token', data.token);
+          setToken(data.token);
+        }
+        setUsers(prev => prev.map(u => u.id === data.user.id ? { ...u, ...data.user } : u));
+        return data.user;
+      }
+    } catch (err) {
+      console.error('Failed to update profile via API:', err);
+    }
+    // Optimistic fallback update
+    const updated = { ...currentUser, ...updates };
+    setCurrentUser(updated);
+    localStorage.setItem('discord_user', JSON.stringify(updated));
+    setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u));
+    return updated;
   };
 
   // Actions
@@ -498,7 +539,6 @@ export function DiscordProvider({ children }) {
 
   const editMessage = async (messageId, newContent) => {
     if (!currentUser) return;
-    // Optimistic update
     setMessagesMap(prev => {
       const list = prev[activeChannelId] || [];
       return {
@@ -529,7 +569,6 @@ export function DiscordProvider({ children }) {
 
   const deleteMessage = async (messageId) => {
     if (!currentUser) return;
-    // Optimistic update
     setMessagesMap(prev => {
       const list = prev[activeChannelId] || [];
       return {
@@ -726,27 +765,7 @@ export function DiscordProvider({ children }) {
 
   const updateStatus = (status, customStatus) => {
     if (!currentUser) return;
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('user:status', {
-        userId: currentUser.id,
-        status,
-        customStatus
-      });
-    } else {
-      fetch(`${BACKEND_URL}/api/users/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser.id, status, customStatus })
-      })
-        .then(res => res.json())
-        .then(updated => {
-          if (updated) {
-            setCurrentUser(prev => ({ ...prev, ...updated }));
-            setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u));
-          }
-        })
-        .catch(console.warn);
-    }
+    updateProfile({ status, customStatus });
   };
 
   const createServer = async (name, icon) => {
@@ -799,6 +818,7 @@ export function DiscordProvider({ children }) {
         login,
         register,
         logout,
+        updateProfile,
         users,
         servers,
         currentServer,
@@ -820,6 +840,7 @@ export function DiscordProvider({ children }) {
         activeDmUserId,
         setActiveDmUserId,
         directMessages,
+        setDirectMessages,
         // Voice
         voiceRooms,
         activeVoiceChannelId,

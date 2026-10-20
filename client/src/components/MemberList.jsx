@@ -111,9 +111,16 @@ export default function MemberList() {
           >
             {/* Banner */}
             <div
-              className="h-24 w-full"
-              style={{ backgroundColor: selectedUser.color || '#5865f2' }}
-            />
+              className="h-24 w-full relative"
+              style={{
+                backgroundColor: selectedUser.color || '#5865f2',
+                backgroundImage: selectedUser.banner ? `url(${selectedUser.banner})` : undefined,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }}
+            >
+              <div className="absolute inset-0 bg-black/15" />
+            </div>
 
             {/* Profile info */}
             <div className="px-4 pb-4 relative">
@@ -121,7 +128,7 @@ export default function MemberList() {
                 <img
                   src={selectedUser.avatar}
                   alt={selectedUser.username}
-                  className="w-20 h-20 rounded-full border-4 border-[#232428] object-cover"
+                  className="w-20 h-20 rounded-full border-4 border-[#232428] object-cover bg-[#1e1f22]"
                 />
                 <span
                   className={`absolute bottom-1 left-14 w-4 h-4 rounded-full border-2 border-[#232428] ${getStatusColor(
@@ -140,7 +147,14 @@ export default function MemberList() {
 
                 {selectedUser.customStatus && (
                   <div className="text-xs text-[#dbdee1] mt-2 pt-2 border-t border-[#232428]">
-                    {selectedUser.customStatus}
+                    💬 {selectedUser.customStatus}
+                  </div>
+                )}
+
+                {selectedUser.bio && (
+                  <div className="text-xs text-[#b5bac1] mt-2 pt-2 border-t border-[#232428] whitespace-pre-line">
+                    <span className="text-[10px] uppercase font-bold text-[#949ba4] block mb-0.5">About Me</span>
+                    {selectedUser.bio}
                   </div>
                 )}
               </div>
