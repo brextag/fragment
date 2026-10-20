@@ -1,9 +1,13 @@
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Determine storage path based on environment
-let DATA_FILE = path.join(__dirname, '../server/data.json');
+let DATA_FILE = path.join(__dirname, '../../server/data.json');
 if (process.env.VERCEL || !fs.existsSync(path.dirname(DATA_FILE))) {
   DATA_FILE = path.join('/tmp', 'fragment_data.json');
 }
@@ -432,7 +436,6 @@ class Store {
     return affectedChannelId;
   }
 
-  // Smart Sync Query for Vercel Polling
   getSyncData(channelId, userId, since) {
     let newMessages = [];
     if (channelId) {
@@ -459,7 +462,6 @@ class Store {
     };
   }
 
-  // HTTP Helper utilities for Vercel Serverless Functions
   handleCors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -479,4 +481,5 @@ class Store {
   }
 }
 
-module.exports = new Store();
+const store = new Store();
+export default store;

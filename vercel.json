@@ -5,16 +5,8 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     {
-      "source": "/api/messages/:channelId",
-      "destination": "/api/messages?channelId=:channelId"
-    },
-    {
-      "source": "/api/dm/:userA/:userB",
-      "destination": "/api/dm?userA=:userA&userB=:userB"
-    },
-    {
       "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "destination": "/api"
     },
     {
       "source": "/(.*)",
