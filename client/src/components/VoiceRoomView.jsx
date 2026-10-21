@@ -25,20 +25,114 @@ export default function VoiceRoomView() {
     toggleMute,
     isDeafened,
     toggleDeafen,
+    isSpeaking,
     setIsMobileNavOpen,
     currentUser,
     users
   } = useDiscord();
 
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenStream, setScreenStream] = useState(null);
+  const [isTestingMic, setIsTestingMic] = useState(false);
   const canvasRef = useRef(null);
+  const screenVideoRef = useRef(null);
+  const loopbackAudioRef = useRef(null);
 
-  const participants = voiceRooms[currentChannel?.id] || [];
   const isConnected = activeVoiceChannelId === currentChannel?.id;
+  const rawParticipants = voiceRooms[currentChannel?.id] || [];
 
-  // Screen share simulation: Matrix Digital Rain animation on canvas
+  // Ensure currentUser is always shown in participants when connected
+  const participants = React.useMemo(() => {
+    const list = [...rawParticipants];
+    if (isConnected && currentUser) {
+      const idx = list.findIndex(p => p.userId === currentUser.id);
+      const localParticipant = {
+        userId: currentUser.id,
+        username: currentUser.username,
+        displayName: currentUser.displayName || currentUser.username,
+        avatar: currentUser.avatar,
+        banner: currentUser.banner,
+        isMuted,
+        isDeafened,
+        isSpeaking
+      };
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...localParticipant };
+      } else {
+        list.push(localParticipant);
+      }
+    }
+    return list;
+  }, [rawParticipants, isConnected, currentUser, isMuted, isDeafened, isSpeaking]);
+
+  // Handle screen share (real getDisplayMedia with fallback to canvas)
+  const handleToggleScreenShare = async () => {
+    if (isScreenSharing) {
+      if (screenStream) {
+        screenStream.getTracks().forEach(t => t.stop());
+        setScreenStream(null);
+      }
+      setIsScreenSharing(false);
+      return;
+    }
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        stream.getVideoTracks()[0].onended = () => {
+          setScreenStream(null);
+          setIsScreenSharing(false);
+        };
+        setScreenStream(stream);
+        setIsScreenSharing(true);
+        return;
+      } catch (err) {
+        // User cancelled or mobile browser doesn't support getDisplayMedia -> fallback to canvas
+      }
+    }
+    setIsScreenSharing(true);
+  };
+
   useEffect(() => {
-    if (!isScreenSharing || !canvasRef.current) return;
+    if (screenVideoRef.current && screenStream) {
+      screenVideoRef.current.srcObject = screenStream;
+    }
+  }, [screenStream, isScreenSharing]);
+
+  // Mic loopback test
+  useEffect(() => {
+    if (!isTestingMic || !isConnected) {
+      if (loopbackAudioRef.current) {
+        loopbackAudioRef.current.pause();
+        loopbackAudioRef.current.srcObject = null;
+      }
+      return;
+    }
+    let active = true;
+    let streamRef = null;
+    navigator.mediaDevices?.getUserMedia({ audio: true })
+      .then(stream => {
+        if (!active) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        streamRef = stream;
+        if (loopbackAudioRef.current) {
+          loopbackAudioRef.current.srcObject = stream;
+          loopbackAudioRef.current.play().catch(() => {});
+        }
+      })
+      .catch(() => setIsTestingMic(false));
+
+    return () => {
+      active = false;
+      if (streamRef) streamRef.getTracks().forEach(t => t.stop());
+    };
+  }, [isTestingMic, isConnected]);
+
+  // Screen share simulation fallback on canvas when screenStream is null
+  useEffect(() => {
+    if (!isScreenSharing || screenStream || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let animId;
@@ -72,7 +166,7 @@ export default function VoiceRoomView() {
 
     draw();
     return () => cancelAnimationFrame(animId);
-  }, [isScreenSharing]);
+  }, [isScreenSharing, screenStream]);
 
   return (
     <div className="flex-1 flex flex-col bg-[#1e1f22] h-full select-none overflow-hidden relative">
@@ -130,14 +224,26 @@ export default function VoiceRoomView() {
             {/* Screen share area if active */}
             {isScreenSharing && (
               <div className="relative w-full max-w-3xl mx-auto rounded-xl overflow-hidden border-2 border-[#5865f2] bg-black shadow-2xl">
-                <canvas ref={canvasRef} className="w-full h-auto object-cover" />
+                {screenStream ? (
+                  <video
+                    ref={screenVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full max-h-[50vh] object-contain bg-black"
+                  />
+                ) : (
+                  <canvas ref={canvasRef} className="w-full h-auto object-cover" />
+                )}
                 <div className="absolute top-3 left-3 bg-[#111214]/80 px-2.5 py-1 rounded-md text-xs text-white font-semibold flex items-center gap-2">
                   <ScreenShare size={14} className="text-[#23a55a]" />
-                  <span>{currentUser.displayName}'s Screen</span>
+                  <span>{currentUser.displayName || currentUser.username}'s Screen</span>
                   <span className="bg-[#f23f43] text-white text-[10px] px-1 rounded uppercase font-bold">LIVE</span>
                 </div>
               </div>
             )}
+
+            <audio ref={loopbackAudioRef} className="hidden" />
 
             {/* Participants Grid */}
             <div className={`grid gap-4 w-full ${
@@ -150,7 +256,9 @@ export default function VoiceRoomView() {
               {participants.map((participant) => {
                 const u = users.find(user => user.id === participant.userId) || participant;
                 const isLocalUser = participant.userId === currentUser.id;
-                const speaking = participant.isSpeaking;
+                const speaking = isLocalUser ? isSpeaking : participant.isSpeaking;
+                const muted = isLocalUser ? isMuted : participant.isMuted;
+                const deafened = isLocalUser ? isDeafened : participant.isDeafened;
 
                 return (
                   <div
@@ -185,24 +293,24 @@ export default function VoiceRoomView() {
                         {isLocalUser && <span className="text-xs text-[#949ba4] ml-1">(you)</span>}
                       </div>
                       <div className="text-xs text-[#949ba4] mt-0.5">
-                        {participant.isMuted
+                        {muted
                           ? 'Muted'
-                          : participant.isDeafened
+                          : deafened
                           ? 'Deafened'
                           : speaking
                           ? 'Speaking...'
-                          : 'Connected'}
+                          : 'Voice Connected'}
                       </div>
                     </div>
 
                     {/* Status icons overlay */}
                     <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                      {participant.isMuted && (
+                      {muted && (
                         <div className="bg-[#f23f43] p-1.5 rounded-full text-white shadow">
                           <MicOff size={14} />
                         </div>
                       )}
-                      {participant.isDeafened && (
+                      {deafened && (
                         <div className="bg-[#f23f43] p-1.5 rounded-full text-white shadow">
                           <Headphones size={14} />
                         </div>
@@ -218,9 +326,9 @@ export default function VoiceRoomView() {
 
       {/* Floating Bottom Control Bar */}
       {isConnected && (
-        <div className="h-20 bg-[#111214]/90 backdrop-blur border-t border-[#2b2d31] flex items-center justify-center gap-4 px-6 z-20">
+        <div className="h-20 bg-[#111214]/90 backdrop-blur border-t border-[#2b2d31] flex items-center justify-center gap-3 sm:gap-4 px-4 sm:px-6 z-20">
           <button
-            onClick={() => setIsScreenSharing(!isScreenSharing)}
+            onClick={handleToggleScreenShare}
             className={`p-3 rounded-full transition flex items-center justify-center ${
               isScreenSharing
                 ? 'bg-[#5865f2] text-white hover:bg-[#4752c4]'
@@ -253,6 +361,19 @@ export default function VoiceRoomView() {
             title={isDeafened ? 'Undeafen' : 'Deafen'}
           >
             <Headphones size={22} />
+          </button>
+
+          <button
+            onClick={() => setIsTestingMic(!isTestingMic)}
+            className={`px-3 py-2.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 ${
+              isTestingMic
+                ? 'bg-[#23a55a] text-white hover:bg-[#1f934f]'
+                : 'bg-[#2b2d31] text-[#dbdee1] hover:bg-[#35373c] hover:text-white'
+            }`}
+            title="Test your microphone by hearing your own voice"
+          >
+            <Volume2 size={18} />
+            <span className="hidden sm:inline">{isTestingMic ? 'Stop Mic Test' : 'Test Mic'}</span>
           </button>
 
           <button

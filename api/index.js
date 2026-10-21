@@ -208,15 +208,35 @@ export default async function handler(req, res) {
     const channelId = query.channelId || url.searchParams.get('channelId');
     const userId = query.userId || url.searchParams.get('userId');
     const since = query.since || url.searchParams.get('since');
-    const syncData = store.getSyncData(channelId, userId, since);
+    const voiceChannelId = query.voiceChannelId || url.searchParams.get('voiceChannelId');
+    let voiceHeartbeat = null;
+    if (voiceChannelId && userId) {
+      voiceHeartbeat = {
+        channelId: voiceChannelId,
+        userId,
+        username: query.username || url.searchParams.get('username') || 'User',
+        displayName: query.displayName || url.searchParams.get('displayName') || 'User',
+        avatar: query.avatar || url.searchParams.get('avatar') || '',
+        isMuted: (query.isMuted || url.searchParams.get('isMuted')) === 'true',
+        isDeafened: (query.isDeafened || url.searchParams.get('isDeafened')) === 'true',
+        isSpeaking: (query.isSpeaking || url.searchParams.get('isSpeaking')) === 'true'
+      };
+    }
+    const syncData = store.getSyncData(channelId, userId, since, voiceHeartbeat);
     return res.status(200).json(syncData);
   }
 
   // 14. Voice: /api/voice
   if (pathname === '/api/voice') {
-    if (req.method === 'GET') return res.status(200).json(store.getVoiceState());
+    if (req.method === 'GET') {
+      const userId = query.userId || url.searchParams.get('userId');
+      return res.status(200).json({
+        voiceRooms: store.getVoiceState(),
+        voiceSignals: userId ? store.popVoiceSignals(userId) : []
+      });
+    }
     if (req.method === 'POST') {
-      const { action, channelId, userId, user, changes } = store.parseBody(req);
+      const { action, channelId, userId, user, changes, toUserId, fromUserId, signal } = store.parseBody(req);
       if (action === 'join' && channelId && user) {
         const voiceUser = {
           userId: user.id,
@@ -237,8 +257,12 @@ export default async function handler(req, res) {
         return res.status(200).json({ voiceRooms: store.getVoiceState() });
       }
       if (action === 'update' && userId && changes) {
-        store.updateVoiceUser(userId, changes);
+        store.updateVoiceUser(userId, changes, channelId);
         return res.status(200).json({ voiceRooms: store.getVoiceState() });
+      }
+      if (action === 'signal' && toUserId && fromUserId && signal) {
+        store.addVoiceSignal({ toUserId, fromUserId, channelId, signal });
+        return res.status(200).json({ ok: true, voiceSignals: store.popVoiceSignals(fromUserId) });
       }
       return res.status(400).json({ error: 'Invalid parameters' });
     }

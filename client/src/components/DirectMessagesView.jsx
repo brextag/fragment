@@ -12,7 +12,12 @@ import {
   Smile,
   Send,
   X,
-  Menu
+  Menu,
+  Mic,
+  MicOff,
+  Headphones,
+  PhoneOff,
+  Volume2
 } from 'lucide-react';
 
 export default function DirectMessagesView() {
@@ -23,7 +28,16 @@ export default function DirectMessagesView() {
     currentUser,
     users,
     directMessages,
-    sendMessage
+    sendMessage,
+    voiceRooms,
+    activeVoiceChannelId,
+    joinVoice,
+    leaveVoice,
+    isMuted,
+    toggleMute,
+    isDeafened,
+    toggleDeafen,
+    isSpeaking
   } = useDiscord();
 
   const [activeTab, setActiveTab] = useState('online'); // 'online' | 'all' | 'add'
@@ -62,6 +76,23 @@ export default function DirectMessagesView() {
 
   // If a specific DM conversation is open
   if (activeDmUserId && targetUser) {
+    const dmVoiceChannelId = `dm_voice_${[currentUser.id, targetUser.id].sort().join('_')}`;
+    const isInThisDmCall = activeVoiceChannelId === dmVoiceChannelId;
+    const rawCallParticipants = voiceRooms[dmVoiceChannelId] || [];
+    const callParticipants = [...rawCallParticipants];
+    if (isInThisDmCall && !callParticipants.some(p => p.userId === currentUser.id)) {
+      callParticipants.push({
+        userId: currentUser.id,
+        username: currentUser.username,
+        displayName: currentUser.displayName || currentUser.username,
+        avatar: currentUser.avatar,
+        isMuted,
+        isDeafened,
+        isSpeaking
+      });
+    }
+    const isCallActive = isInThisDmCall || callParticipants.length > 0;
+
     return (
       <div className="flex-1 flex flex-col bg-[#313338] h-full overflow-hidden select-text">
         {/* DM Header */}
@@ -95,23 +126,110 @@ export default function DirectMessagesView() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3 text-[#b5bac1]">
+          <div className="flex items-center gap-2 sm:gap-3 text-[#b5bac1]">
             <button
-              onClick={() => {}}
-              className="p-1.5 hover:bg-[#35373c] hover:text-white rounded transition"
-              title="Start Voice Call"
+              type="button"
+              onClick={() => isInThisDmCall ? leaveVoice() : joinVoice(dmVoiceChannelId)}
+              className={`p-1.5 rounded transition flex items-center gap-1.5 text-xs font-semibold ${
+                isInThisDmCall
+                  ? 'bg-[#f23f43] text-white hover:bg-[#da373b] px-2.5'
+                  : 'hover:bg-[#35373c] hover:text-white'
+              }`}
+              title={isInThisDmCall ? 'Leave Voice Call' : 'Start Voice Call'}
             >
-              <Phone size={18} />
+              {isInThisDmCall ? <PhoneOff size={16} /> : <Phone size={18} />}
+              {isInThisDmCall && <span className="hidden sm:inline">End Call</span>}
             </button>
             <button
-              onClick={() => {}}
+              type="button"
+              onClick={() => isInThisDmCall ? leaveVoice() : joinVoice(dmVoiceChannelId)}
               className="p-1.5 hover:bg-[#35373c] hover:text-white rounded transition"
-              title="Start Video Call"
+              title="Start Voice/Video Call"
             >
               <Video size={18} />
             </button>
           </div>
         </div>
+
+        {/* Active DM Voice Call Panel */}
+        {isCallActive && (
+          <div className="bg-[#111214] border-b border-[#1f2023] px-4 py-4 flex flex-col items-center gap-4 select-none">
+            <div className="flex items-center justify-center gap-6 flex-wrap">
+              {callParticipants.map(p => {
+                const u = (users || []).find(usr => usr.id === p.userId) || p;
+                const isMe = p.userId === currentUser.id;
+                const speaking = isMe ? isSpeaking : p.isSpeaking;
+                const muted = isMe ? isMuted : p.isMuted;
+
+                return (
+                  <div key={p.userId} className="flex flex-col items-center gap-1.5">
+                    <div className="relative">
+                      <img
+                        src={u.avatar}
+                        alt={u.username}
+                        className={`w-16 h-16 rounded-full object-cover bg-[#1e1f22] transition-all ${
+                          speaking ? 'speaking-ring' : 'border-2 border-[#2b2d31]'
+                        }`}
+                      />
+                      {muted && (
+                        <span className="absolute -bottom-1 -right-1 bg-[#f23f43] text-white p-1 rounded-full shadow">
+                          <MicOff size={12} />
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-semibold text-white">
+                      {u.displayName || u.username} {isMe && '(you)'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {!isInThisDmCall ? (
+                <button
+                  type="button"
+                  onClick={() => joinVoice(dmVoiceChannelId)}
+                  className="bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-semibold px-4 py-2 rounded-full flex items-center gap-1.5 shadow transition"
+                >
+                  <Volume2 size={16} />
+                  <span>Join Voice Call</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className={`p-2.5 rounded-full transition ${
+                      isMuted ? 'bg-[#f23f43] text-white' : 'bg-[#2b2d31] text-[#dbdee1] hover:bg-[#35373c]'
+                    }`}
+                    title={isMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleDeafen}
+                    className={`p-2.5 rounded-full transition ${
+                      isDeafened ? 'bg-[#f23f43] text-white' : 'bg-[#2b2d31] text-[#dbdee1] hover:bg-[#35373c]'
+                    }`}
+                    title={isDeafened ? 'Undeafen' : 'Deafen'}
+                  >
+                    <Headphones size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={leaveVoice}
+                    className="p-2.5 rounded-full bg-[#f23f43] hover:bg-[#da373b] text-white transition shadow"
+                    title="Disconnect"
+                  >
+                    <PhoneOff size={18} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Message history */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

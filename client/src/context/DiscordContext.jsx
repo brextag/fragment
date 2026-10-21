@@ -248,7 +248,21 @@ export function DiscordProvider({ children }) {
     const syncWithServer = async () => {
       try {
         const channelParam = activeServerId === '@me' ? '' : activeChannelId;
-        const res = await fetch(`${BACKEND_URL}/api/sync?channelId=${encodeURIComponent(channelParam || '')}&userId=${encodeURIComponent(currentUser.id)}`);
+        const params = new URLSearchParams({
+          channelId: channelParam || '',
+          userId: currentUser.id
+        });
+        if (activeVoiceChannelId) {
+          params.set('voiceChannelId', activeVoiceChannelId);
+          params.set('username', currentUser.username || 'User');
+          params.set('displayName', currentUser.displayName || currentUser.username || 'User');
+          params.set('avatar', currentUser.avatar || '');
+          params.set('isMuted', String(isMuted));
+          params.set('isDeafened', String(isDeafened));
+          params.set('isSpeaking', String(isSpeaking));
+        }
+
+        const res = await fetch(`${BACKEND_URL}/api/sync?${params.toString()}`);
         if (!res.ok || !isMounted) return;
         const data = await res.json();
         if (!isMounted) return;
@@ -258,7 +272,37 @@ export function DiscordProvider({ children }) {
         }
 
         if (data.voiceRooms) {
-          setVoiceRooms(data.voiceRooms);
+          setVoiceRooms(prev => {
+            const merged = { ...data.voiceRooms };
+            // Always preserve local user in activeVoiceChannelId so cold lambdas never drop local user
+            if (activeVoiceChannelId && currentUser) {
+              const roomList = [...(merged[activeVoiceChannelId] || [])];
+              const myIdx = roomList.findIndex(p => p.userId === currentUser.id);
+              const myState = {
+                userId: currentUser.id,
+                username: currentUser.username,
+                displayName: currentUser.displayName || currentUser.username,
+                avatar: currentUser.avatar,
+                banner: currentUser.banner,
+                isMuted,
+                isDeafened,
+                isSpeaking
+              };
+              if (myIdx >= 0) {
+                roomList[myIdx] = { ...roomList[myIdx], ...myState };
+              } else {
+                roomList.push(myState);
+              }
+              merged[activeVoiceChannelId] = roomList;
+            }
+            return merged;
+          });
+        }
+
+        if (data.voiceSignals && Array.isArray(data.voiceSignals) && data.voiceSignals.length > 0) {
+          data.voiceSignals.forEach(sig => {
+            window.dispatchEvent(new CustomEvent('fragment:voice-signal', { detail: sig }));
+          });
         }
 
         if (data.servers && data.servers.length > 0) {
@@ -304,14 +348,14 @@ export function DiscordProvider({ children }) {
       }
     };
 
-    const pollInterval = isSocketConnected ? 8000 : 1500;
+    const pollInterval = isSocketConnected ? 5000 : (activeVoiceChannelId ? 1000 : 1500);
     const intervalTimer = setInterval(syncWithServer, pollInterval);
 
     return () => {
       isMounted = false;
       clearInterval(intervalTimer);
     };
-  }, [currentUser?.id, activeChannelId, activeServerId, isSocketConnected]);
+  }, [currentUser?.id, activeChannelId, activeServerId, isSocketConnected, activeVoiceChannelId, isMuted, isDeafened, isSpeaking]);
 
   // Load messages whenever activeChannelId changes
   useEffect(() => {
@@ -677,68 +721,129 @@ export function DiscordProvider({ children }) {
 
   // Voice Controls
   const joinVoice = async (channelId) => {
-    if (!currentUser || activeVoiceChannelId === channelId) return;
+    if (!currentUser || !channelId) return;
 
-    if (activeVoiceChannelId) {
+    if (activeVoiceChannelId && activeVoiceChannelId !== channelId) {
       leaveVoice();
     }
 
-    sounds.playJoinVoice();
+    if (activeVoiceChannelId !== channelId) {
+      sounds.playJoinVoice();
+    }
     setActiveVoiceChannelId(channelId);
+
+    const myVoiceEntry = {
+      userId: currentUser.id,
+      username: currentUser.username,
+      displayName: currentUser.displayName || currentUser.username,
+      avatar: currentUser.avatar,
+      banner: currentUser.banner,
+      isMuted,
+      isDeafened,
+      isSpeaking: false
+    };
+
+    // Optimistic local state update so user appears immediately in the room
+    setVoiceRooms(prev => {
+      const cleaned = {};
+      for (const [chId, list] of Object.entries(prev || {})) {
+        cleaned[chId] = (list || []).filter(p => p.userId !== currentUser.id);
+      }
+      cleaned[channelId] = [...(cleaned[channelId] || []), myVoiceEntry];
+      return cleaned;
+    });
 
     if (socketRef.current?.connected) {
       socketRef.current.emit('voice:join', {
         channelId,
         user: currentUser
       });
-    } else {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/voice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'join',
-            channelId,
-            user: currentUser
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.voiceRooms) setVoiceRooms(data.voiceRooms);
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'join',
+          channelId,
+          user: currentUser,
+          changes: { isMuted, isDeafened, isSpeaking: false }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.voiceRooms) {
+          setVoiceRooms(prev => {
+            const merged = { ...data.voiceRooms };
+            const list = [...(merged[channelId] || [])];
+            if (!list.some(p => p.userId === currentUser.id)) {
+              list.push(myVoiceEntry);
+            }
+            merged[channelId] = list;
+            return merged;
+          });
         }
-      } catch (e) {
-        console.warn(e);
       }
+    } catch (e) {
+      console.warn(e);
     }
   };
 
   const leaveVoice = async () => {
     if (!activeVoiceChannelId || !currentUser) return;
     sounds.playLeaveVoice();
+    const leavingChannelId = activeVoiceChannelId;
     setActiveVoiceChannelId(null);
     setIsSpeaking(false);
 
+    // Optimistic removal
+    setVoiceRooms(prev => {
+      const cleaned = {};
+      for (const [chId, list] of Object.entries(prev || {})) {
+        cleaned[chId] = (list || []).filter(p => p.userId !== currentUser.id);
+      }
+      return cleaned;
+    });
+
     if (socketRef.current?.connected) {
       socketRef.current.emit('voice:leave', { userId: currentUser.id });
-    } else {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/voice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'leave',
-            userId: currentUser.id
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.voiceRooms) setVoiceRooms(data.voiceRooms);
-        }
-      } catch (e) {
-        console.warn(e);
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'leave',
+          channelId: leavingChannelId,
+          userId: currentUser.id
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.voiceRooms) setVoiceRooms(data.voiceRooms);
       }
+    } catch (e) {
+      console.warn(e);
     }
   };
+
+  // Sync local speaking indicator immediately in voiceRooms
+  useEffect(() => {
+    if (!activeVoiceChannelId || !currentUser) return;
+    setVoiceRooms(prev => {
+      const room = prev[activeVoiceChannelId] || [];
+      const exists = room.some(p => p.userId === currentUser.id);
+      if (!exists) return prev;
+      return {
+        ...prev,
+        [activeVoiceChannelId]: room.map(p =>
+          p.userId === currentUser.id ? { ...p, isSpeaking } : p
+        )
+      };
+    });
+  }, [isSpeaking, activeVoiceChannelId, currentUser?.id]);
 
   const toggleMute = () => {
     const next = !isMuted;
@@ -747,22 +852,29 @@ export function DiscordProvider({ children }) {
     else sounds.playUnmute();
 
     if (activeVoiceChannelId && currentUser) {
+      setVoiceRooms(prev => ({
+        ...prev,
+        [activeVoiceChannelId]: (prev[activeVoiceChannelId] || []).map(p =>
+          p.userId === currentUser.id ? { ...p, isMuted: next, isSpeaking: next ? false : p.isSpeaking } : p
+        )
+      }));
+
       if (socketRef.current?.connected) {
         socketRef.current.emit('voice:update', {
           userId: currentUser.id,
           changes: { isMuted: next }
         });
-      } else {
-        fetch(`${BACKEND_URL}/api/voice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'update',
-            userId: currentUser.id,
-            changes: { isMuted: next }
-          })
-        }).catch(console.warn);
       }
+      fetch(`${BACKEND_URL}/api/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          channelId: activeVoiceChannelId,
+          userId: currentUser.id,
+          changes: { isMuted: next }
+        })
+      }).catch(console.warn);
     }
   };
 
@@ -770,25 +882,33 @@ export function DiscordProvider({ children }) {
     const next = !isDeafened;
     setIsDeafened(next);
     sounds.playDeafen();
+    const nextMuted = next ? true : isMuted;
     if (next && !isMuted) setIsMuted(true);
 
     if (activeVoiceChannelId && currentUser) {
+      setVoiceRooms(prev => ({
+        ...prev,
+        [activeVoiceChannelId]: (prev[activeVoiceChannelId] || []).map(p =>
+          p.userId === currentUser.id ? { ...p, isDeafened: next, isMuted: nextMuted } : p
+        )
+      }));
+
       if (socketRef.current?.connected) {
         socketRef.current.emit('voice:update', {
           userId: currentUser.id,
-          changes: { isDeafened: next, isMuted: next ? true : isMuted }
+          changes: { isDeafened: next, isMuted: nextMuted }
         });
-      } else {
-        fetch(`${BACKEND_URL}/api/voice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'update',
-            userId: currentUser.id,
-            changes: { isDeafened: next, isMuted: next ? true : isMuted }
-          })
-        }).catch(console.warn);
       }
+      fetch(`${BACKEND_URL}/api/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          channelId: activeVoiceChannelId,
+          userId: currentUser.id,
+          changes: { isDeafened: next, isMuted: nextMuted }
+        })
+      }).catch(console.warn);
     }
   };
 
