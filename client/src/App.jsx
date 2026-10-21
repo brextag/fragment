@@ -48,22 +48,43 @@ function DiscordLayout() {
   const {
     activeServerId,
     currentChannel,
-    isMemberListOpen
+    isMemberListOpen,
+    isMobileNavOpen,
+    setIsMobileNavOpen
   } = useDiscord();
 
   const isDMs = activeServerId === '@me';
   const isVoiceChannel = !isDMs && currentChannel?.type === 'voice';
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
-      {/* 1. Left Server Rail */}
-      <ServerSidebar />
+    <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22] relative">
+      {/* 1. Desktop Sidebars (hidden on mobile, visible md and up) */}
+      <div className="hidden md:flex h-full flex-shrink-0 z-20">
+        <ServerSidebar />
+        <ChannelSidebar />
+      </div>
 
-      {/* 2. Channel Sidebar */}
-      <ChannelSidebar />
+      {/* 2. Mobile Navigation Drawer (off-canvas slide-in on mobile) */}
+      {isMobileNavOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsMobileNavOpen(false)}
+          />
 
-      {/* 3. Main Center Content Area */}
-      <main className="flex-1 flex overflow-hidden">
+          {/* Drawer content: ServerSidebar + ChannelSidebar */}
+          <div className="relative flex h-full max-w-[85vw] shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+            <ServerSidebar />
+            <div className="w-60 max-w-[calc(85vw-72px)] flex flex-col h-full bg-[#2b2d31]">
+              <ChannelSidebar />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Main Center Content Area (full width on mobile) */}
+      <main className="flex-1 flex overflow-hidden w-full min-w-0 relative">
         {isDMs ? (
           <DirectMessagesView />
         ) : isVoiceChannel ? (

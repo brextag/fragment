@@ -16,9 +16,16 @@ export default function AuthModal() {
   const { login, register } = useDiscord();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => {
+    try {
+      return localStorage.getItem('fragment_saved_username') || '';
+    } catch {
+      return '';
+    }
+  });
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberCredentials, setRememberCredentials] = useState(true);
   const [selectedColor, setSelectedColor] = useState(AVATAR_COLORS[0]);
 
   const [error, setError] = useState('');
@@ -30,24 +37,31 @@ export default function AuthModal() {
     setIsSubmitting(true);
 
     try {
+      const cleanUser = username.trim();
+      if (rememberCredentials && cleanUser) {
+        localStorage.setItem('fragment_saved_username', cleanUser);
+      } else {
+        localStorage.removeItem('fragment_saved_username');
+      }
+
       if (isRegisterMode) {
-        if (username.trim().length < 2) {
+        if (cleanUser.length < 2) {
           throw new Error('Username must be at least 2 characters.');
         }
         if (password.length < 4) {
           throw new Error('Password must be at least 4 characters.');
         }
-        const avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username.trim())}`;
+        const avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUser)}`;
         await register({
-          username: username.trim(),
-          displayName: displayName.trim() || username.trim(),
+          username: cleanUser,
+          displayName: displayName.trim() || cleanUser,
           password,
           avatar,
           color: selectedColor
         });
       } else {
         await login({
-          username: username.trim(),
+          username: cleanUser,
           password
         });
       }
@@ -95,15 +109,21 @@ export default function AuthModal() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form id="fragment_auth_form" name="fragment_auth_form" onSubmit={handleSubmit} className="space-y-4">
           {/* Username */}
           <div>
-            <label className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block mb-2">
+            <label htmlFor="username" className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block mb-2">
               Username <span className="text-[#f23f43]">*</span>
             </label>
             <div className="relative flex items-center bg-[#1e1f22] border border-[#232428] rounded-md focus-within:border-[#5865f2] transition">
               <input
+                id="username"
+                name="username"
                 type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck="false"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -116,12 +136,15 @@ export default function AuthModal() {
           {/* Display Name (Only in Register mode) */}
           {isRegisterMode && (
             <div>
-              <label className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block mb-2">
+              <label htmlFor="displayName" className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block mb-2">
                 Display Name <span className="text-[#949ba4] font-normal normal-case">(optional)</span>
               </label>
               <div className="relative flex items-center bg-[#1e1f22] border border-[#232428] rounded-md focus-within:border-[#5865f2] transition">
                 <input
+                  id="displayName"
+                  name="displayName"
                   type="text"
+                  autoComplete="nickname"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="How friends will see you"
@@ -133,12 +156,15 @@ export default function AuthModal() {
 
           {/* Password */}
           <div>
-            <label className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block mb-2">
+            <label htmlFor="password" className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block mb-2">
               Password <span className="text-[#f23f43]">*</span>
             </label>
             <div className="relative flex items-center bg-[#1e1f22] border border-[#232428] rounded-md focus-within:border-[#5865f2] transition">
               <input
+                id="password"
+                name="password"
                 type="password"
+                autoComplete={isRegisterMode ? "new-password" : "current-password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -146,6 +172,19 @@ export default function AuthModal() {
                 className="w-full bg-transparent px-3 py-2.5 text-sm text-white placeholder-[#949ba4] outline-none"
               />
             </div>
+          </div>
+
+          {/* Remember Credentials Checkbox */}
+          <div className="flex items-center gap-2 pt-1 pb-1">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none text-xs text-[#b5bac1] hover:text-white transition">
+              <input
+                type="checkbox"
+                checked={rememberCredentials}
+                onChange={(e) => setRememberCredentials(e.target.checked)}
+                className="w-4 h-4 rounded border-[#232428] bg-[#1e1f22] text-[#5865f2] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#5865f2]"
+              />
+              <span>Remember my credentials on this device</span>
+            </label>
           </div>
 
           {/* Color Picker (Only in Register mode) */}
@@ -173,6 +212,7 @@ export default function AuthModal() {
           {/* Submit Button */}
           <button
             type="submit"
+            id="auth_submit"
             disabled={isSubmitting || !username.trim() || !password}
             className="w-full bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-50 text-white font-semibold py-2.5 rounded text-sm transition shadow-lg mt-2"
           >

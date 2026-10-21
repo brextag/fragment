@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useDiscord } from '../context/DiscordContext';
-import { ShieldCheck, MessageSquare, Award, Sparkles } from 'lucide-react';
+import { ShieldCheck, MessageSquare, Award, Sparkles, X } from 'lucide-react';
 
 export default function MemberList() {
   const {
     users,
     currentUser,
     setActiveServerId,
-    setActiveDmUserId
+    setActiveDmUserId,
+    setIsMemberListOpen
   } = useDiscord();
 
   const [selectedUser, setSelectedUser] = useState(null);
@@ -37,11 +38,31 @@ export default function MemberList() {
     setActiveServerId('@me');
     setActiveDmUserId(user.id);
     setSelectedUser(null);
+    if (setIsMemberListOpen) setIsMemberListOpen(false);
   };
 
   return (
-    <aside className="w-60 bg-[#2b2d31] flex flex-col h-full select-none flex-shrink-0 border-l border-[#1f2023] relative">
-      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+    <>
+      {/* Mobile backdrop for MemberList on smaller screens */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
+        onClick={() => setIsMemberListOpen(false)}
+      />
+
+      <aside className="fixed inset-y-0 right-0 z-40 w-64 bg-[#2b2d31] flex flex-col h-full select-none flex-shrink-0 border-l border-[#1f2023] shadow-2xl lg:static lg:w-60 lg:shadow-none animate-in slide-in-from-right duration-200">
+        {/* Header with mobile close button */}
+        <div className="h-12 border-b border-[#1f2023] px-3 flex items-center justify-between lg:hidden text-white font-bold text-sm bg-[#2b2d31]">
+          <span>Members</span>
+          <button
+            type="button"
+            onClick={() => setIsMemberListOpen(false)}
+            className="p-1.5 text-[#949ba4] hover:text-white rounded hover:bg-[#35373c] transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {roleSections.map(section => (
           <div key={section.title} className="space-y-0.5">
             <div className="text-xs font-bold text-[#949ba4] tracking-wider uppercase px-2 py-1">
@@ -190,6 +211,7 @@ export default function MemberList() {
           </div>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }

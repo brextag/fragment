@@ -11,13 +11,15 @@ import {
   PlusCircle,
   Smile,
   Send,
-  X
+  X,
+  Menu
 } from 'lucide-react';
 
 export default function DirectMessagesView() {
   const {
     activeDmUserId,
     setActiveDmUserId,
+    setIsMobileNavOpen,
     currentUser,
     users,
     directMessages,
@@ -63,8 +65,16 @@ export default function DirectMessagesView() {
     return (
       <div className="flex-1 flex flex-col bg-[#313338] h-full overflow-hidden select-text">
         {/* DM Header */}
-        <div className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-sm select-none bg-[#313338]">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="h-12 border-b border-[#1f2023] px-3 sm:px-4 flex items-center justify-between shadow-sm select-none bg-[#313338]">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileNavOpen(true)}
+              className="md:hidden p-1.5 -ml-1 text-[#949ba4] hover:text-white rounded hover:bg-[#35373c] transition flex-shrink-0"
+              title="Open Direct Messages & Servers"
+            >
+              <Menu size={20} />
+            </button>
             <div className="relative">
               <img
                 src={targetUser.avatar}
@@ -213,8 +223,16 @@ export default function DirectMessagesView() {
   return (
     <div className="flex-1 flex flex-col bg-[#313338] h-full overflow-hidden select-none">
       {/* Top Header tabs */}
-      <div className="h-12 border-b border-[#1f2023] px-4 flex items-center gap-4 shadow-sm bg-[#313338]">
-        <div className="flex items-center gap-2 font-bold text-white border-r border-[#3f4147] pr-4">
+      <div className="h-12 border-b border-[#1f2023] px-3 sm:px-4 flex items-center gap-3 sm:gap-4 shadow-sm bg-[#313338]">
+        <button
+          type="button"
+          onClick={() => setIsMobileNavOpen(true)}
+          className="md:hidden p-1.5 -ml-1 text-[#949ba4] hover:text-white rounded hover:bg-[#35373c] transition flex-shrink-0"
+          title="Open Direct Messages & Servers"
+        >
+          <Menu size={20} />
+        </button>
+        <div className="flex items-center gap-2 font-bold text-white border-r border-[#3f4147] pr-3 sm:pr-4">
           <Users size={20} />
           <span>Friends</span>
         </div>

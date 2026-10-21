@@ -43,8 +43,8 @@ export default async function handler(req, res) {
   if (pathname === '/api/auth/login') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     try {
-      const { username, password } = store.parseBody(req);
-      const result = store.loginUser({ username, password });
+      const { username, password, clientVaultUser } = store.parseBody(req);
+      const result = store.loginUser({ username, password, clientVaultUser });
       return res.status(200).json(result);
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Login failed.' });

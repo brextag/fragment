@@ -10,7 +10,8 @@ import {
   Users,
   Volume2,
   Sparkles,
-  Maximize2
+  Maximize2,
+  Menu
 } from 'lucide-react';
 
 export default function VoiceRoomView() {
@@ -24,6 +25,7 @@ export default function VoiceRoomView() {
     toggleMute,
     isDeafened,
     toggleDeafen,
+    setIsMobileNavOpen,
     currentUser,
     users
   } = useDiscord();
@@ -75,9 +77,17 @@ export default function VoiceRoomView() {
   return (
     <div className="flex-1 flex flex-col bg-[#1e1f22] h-full select-none overflow-hidden relative">
       {/* Top Header */}
-      <div className="h-12 border-b border-[#2b2d31] px-4 flex items-center justify-between bg-[#2b2d31]/40">
-        <div className="flex items-center gap-2">
-          <Volume2 size={24} className="text-[#23a55a]" />
+      <div className="h-12 border-b border-[#2b2d31] px-3 sm:px-4 flex items-center justify-between bg-[#2b2d31]/40">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setIsMobileNavOpen(true)}
+            className="md:hidden p-1.5 -ml-1 text-[#949ba4] hover:text-white rounded hover:bg-[#35373c] transition flex-shrink-0"
+            title="Open Channels & Servers"
+          >
+            <Menu size={20} />
+          </button>
+          <Volume2 size={24} className="text-[#23a55a] flex-shrink-0" />
           <span className="font-bold text-white text-base truncate">
             {currentChannel?.name || 'Voice Channel'}
           </span>

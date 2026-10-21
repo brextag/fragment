@@ -16,7 +16,8 @@ import {
   Reply,
   Check,
   Send,
-  Copy
+  Copy,
+  Menu
 } from 'lucide-react';
 
 const COMMON_EMOJIS = ['👍', '❤️', '🔥', '😂', '🎉', '🚀', '🕶️', '🥩', '✨', '👀', '💯', '💩'];
@@ -36,6 +37,7 @@ export default function ChatArea() {
     setReplyingToMessage,
     isMemberListOpen,
     setIsMemberListOpen,
+    setIsMobileNavOpen,
     currentUser,
     users
   } = useDiscord();
@@ -138,8 +140,16 @@ export default function ChatArea() {
   return (
     <div className="flex-1 flex flex-col bg-[#313338] h-full overflow-hidden select-text relative">
       {/* Top Channel Header */}
-      <div className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-sm select-none z-10 bg-[#313338]">
+      <div className="h-12 border-b border-[#1f2023] px-3 sm:px-4 flex items-center justify-between shadow-sm select-none z-10 bg-[#313338]">
         <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setIsMobileNavOpen(true)}
+            className="md:hidden p-1.5 -ml-1 text-[#949ba4] hover:text-white rounded hover:bg-[#35373c] transition flex-shrink-0"
+            title="Open Channels & Servers"
+          >
+            <Menu size={20} />
+          </button>
           <Hash size={24} className="text-[#80848e] flex-shrink-0" />
           <span className="font-bold text-white text-base truncate">
             {currentChannel?.name || 'general'}

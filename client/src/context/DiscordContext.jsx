@@ -42,6 +42,7 @@ export function DiscordProvider({ children }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // UI Modals & State
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isMemberListOpen, setIsMemberListOpen] = useState(true);
   const [isCreateServerOpen, setIsCreateServerOpen] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
@@ -364,16 +365,25 @@ export function DiscordProvider({ children }) {
     }
     localStorage.setItem('discord_auth_token', data.token);
     localStorage.setItem('discord_user', JSON.stringify(data.user));
+    if (data.vaultUser) {
+      localStorage.setItem('fragment_vault', JSON.stringify(data.vaultUser));
+    }
     setToken(data.token);
     setCurrentUser(data.user);
     return data.user;
   };
 
   const login = async ({ username, password }) => {
+    let clientVaultUser = null;
+    try {
+      const savedVault = localStorage.getItem('fragment_vault');
+      if (savedVault) clientVaultUser = JSON.parse(savedVault);
+    } catch (e) {}
+
     const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, clientVaultUser })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -381,6 +391,9 @@ export function DiscordProvider({ children }) {
     }
     localStorage.setItem('discord_auth_token', data.token);
     localStorage.setItem('discord_user', JSON.stringify(data.user));
+    if (data.vaultUser) {
+      localStorage.setItem('fragment_vault', JSON.stringify(data.vaultUser));
+    }
     setToken(data.token);
     setCurrentUser(data.user);
     return data.user;
@@ -425,6 +438,13 @@ export function DiscordProvider({ children }) {
         const data = await res.json();
         setCurrentUser(data.user);
         localStorage.setItem('discord_user', JSON.stringify(data.user));
+        try {
+          const savedVault = localStorage.getItem('fragment_vault');
+          if (savedVault) {
+            const vaultObj = JSON.parse(savedVault);
+            localStorage.setItem('fragment_vault', JSON.stringify({ ...vaultObj, ...updates }));
+          }
+        } catch (e) {}
         if (data.token) {
           localStorage.setItem('discord_auth_token', data.token);
           setToken(data.token);
@@ -439,6 +459,13 @@ export function DiscordProvider({ children }) {
     const updated = { ...currentUser, ...updates };
     setCurrentUser(updated);
     localStorage.setItem('discord_user', JSON.stringify(updated));
+    try {
+      const savedVault = localStorage.getItem('fragment_vault');
+      if (savedVault) {
+        const vaultObj = JSON.parse(savedVault);
+        localStorage.setItem('fragment_vault', JSON.stringify({ ...vaultObj, ...updates }));
+      }
+    } catch (e) {}
     setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u));
     return updated;
   };
@@ -853,6 +880,8 @@ export function DiscordProvider({ children }) {
         isSpeaking,
         setIsSpeaking,
         // Modals & layout
+        isMobileNavOpen,
+        setIsMobileNavOpen,
         isMemberListOpen,
         setIsMemberListOpen,
         isCreateServerOpen,
