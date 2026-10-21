@@ -1,6 +1,6 @@
 # Fragment — Real-Time Web Messenger
 
-A fast, modern web messenger inspired by Discord, built with React 19, Tailwind CSS, WebRTC, and dual-mode real-time sync.
+A fast, modern real-time web messenger built with React 19, Tailwind CSS, WebRTC, and dual-mode real-time sync.
 
 ---
 

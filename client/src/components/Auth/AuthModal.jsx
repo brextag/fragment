@@ -92,12 +92,12 @@ export default function AuthModal() {
             FRAGMENT
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            {isRegisterMode ? 'Create an account' : 'Welcome back!'}
+            {isRegisterMode ? 'Create your Fragment account' : 'Log in to Fragment'}
           </h1>
           <p className="text-sm text-[#949ba4] mt-1">
             {isRegisterMode
-              ? 'Join Fragment and start chatting with real people'
-              : "We're so excited to see you again on Fragment!"}
+              ? 'Join your community channels and voice rooms'
+              : 'Enter your credentials to continue chatting with your friends'}
           </p>
         </div>
 
@@ -254,6 +254,13 @@ export default function AuthModal() {
                 </button>
               </span>
             )}
+          </div>
+
+          {/* Legal & Safety Disclaimer */}
+          <div className="pt-3 mt-2 border-t border-[#3f4147]/50 text-center">
+            <p className="text-[11px] text-[#949ba4]/70 leading-relaxed">
+              Fragment is an independent community communication platform. Not affiliated with, sponsored, or endorsed by Discord Inc.
+            </p>
           </div>
         </form>
       </div>

@@ -8,10 +8,10 @@ export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 export function DiscordProvider({ children }) {
   // Auth state with local persistent credentials backup
-  const [token, setToken] = useState(() => localStorage.getItem('discord_auth_token'));
+  const [token, setToken] = useState(() => localStorage.getItem('fragment_auth_token') || localStorage.getItem('discord_auth_token'));
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const saved = localStorage.getItem('discord_user');
+      const saved = localStorage.getItem('fragment_user') || localStorage.getItem('discord_user');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -69,7 +69,7 @@ export function DiscordProvider({ children }) {
           const data = await res.json();
           if (data.user) {
             setCurrentUser(data.user);
-            localStorage.setItem('discord_user', JSON.stringify(data.user));
+            localStorage.setItem('fragment_user', JSON.stringify(data.user));
           }
         }
       } catch (err) {
@@ -363,8 +363,8 @@ export function DiscordProvider({ children }) {
     if (!res.ok) {
       throw new Error(data.error || 'Registration failed.');
     }
-    localStorage.setItem('discord_auth_token', data.token);
-    localStorage.setItem('discord_user', JSON.stringify(data.user));
+    localStorage.setItem('fragment_auth_token', data.token);
+    localStorage.setItem('fragment_user', JSON.stringify(data.user));
     if (data.vaultUser) {
       localStorage.setItem('fragment_vault', JSON.stringify(data.vaultUser));
     }
@@ -389,8 +389,8 @@ export function DiscordProvider({ children }) {
     if (!res.ok) {
       throw new Error(data.error || 'Login failed.');
     }
-    localStorage.setItem('discord_auth_token', data.token);
-    localStorage.setItem('discord_user', JSON.stringify(data.user));
+    localStorage.setItem('fragment_auth_token', data.token);
+    localStorage.setItem('fragment_user', JSON.stringify(data.user));
     if (data.vaultUser) {
       localStorage.setItem('fragment_vault', JSON.stringify(data.vaultUser));
     }
@@ -413,6 +413,8 @@ export function DiscordProvider({ children }) {
     } catch (e) {
       console.warn(e);
     }
+    localStorage.removeItem('fragment_auth_token');
+    localStorage.removeItem('fragment_user');
     localStorage.removeItem('discord_auth_token');
     localStorage.removeItem('discord_user');
     setToken(null);
@@ -437,7 +439,7 @@ export function DiscordProvider({ children }) {
       if (res.ok) {
         const data = await res.json();
         setCurrentUser(data.user);
-        localStorage.setItem('discord_user', JSON.stringify(data.user));
+        localStorage.setItem('fragment_user', JSON.stringify(data.user));
         try {
           const savedVault = localStorage.getItem('fragment_vault');
           if (savedVault) {
@@ -446,7 +448,7 @@ export function DiscordProvider({ children }) {
           }
         } catch (e) {}
         if (data.token) {
-          localStorage.setItem('discord_auth_token', data.token);
+          localStorage.setItem('fragment_auth_token', data.token);
           setToken(data.token);
         }
         setUsers(prev => prev.map(u => u.id === data.user.id ? { ...u, ...data.user } : u));
@@ -458,7 +460,7 @@ export function DiscordProvider({ children }) {
     // Optimistic fallback update
     const updated = { ...currentUser, ...updates };
     setCurrentUser(updated);
-    localStorage.setItem('discord_user', JSON.stringify(updated));
+    localStorage.setItem('fragment_user', JSON.stringify(updated));
     try {
       const savedVault = localStorage.getItem('fragment_vault');
       if (savedVault) {
